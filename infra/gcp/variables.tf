@@ -1,14 +1,14 @@
 variable "project_id" {
-  type = string
+  type    = string
   default = "damis-project-01"
 }
 
 variable "region" {
-  type = string
+  type    = string
   default = "us-central1"
 }
 
 variable "environment" {
-  type = string
+  type    = string
   default = "dev"
 }

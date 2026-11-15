@@ -7,7 +7,7 @@ resource "google_project_service" "fraud_apis" {
     "cloudbuild.googleapis.com"
   ])
 
-  project = var.project_id
-  service = each.value
+  project            = var.project_id
+  service            = each.value
   disable_on_destroy = false
 }
