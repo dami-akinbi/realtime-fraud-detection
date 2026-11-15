@@ -1,5 +1,7 @@
 resource "google_project_service" "fraud_apis" {
   for_each = toset([
+    "cloudresourcemanager.googleapis.com",
+    "serviceusage.googleapis.com",
     "pubsub.googleapis.com",
     "firestore.googleapis.com",
     "cloudfunctions.googleapis.com",
