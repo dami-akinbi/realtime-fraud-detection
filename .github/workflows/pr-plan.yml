@@ -1,0 +1,39 @@
+name: Terraform PR Plan
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  plan-gcp:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./infra/gcp
+    steps:
+      - uses: actions/checkout@v4
+      - uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check
+      - run: terraform init
+      - run: terraform validate
+      - run: terraform plan -no-color
+
+  plan-azure:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./infra/azure
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/login@v2
+        with:
+          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - uses: hashicorp/setup-terraform@v3
+      - run: terraform fmt -check
+      - run: terraform init
+      - run: terraform validate
+      - run: terraform plan -no-color
