@@ -1,7 +1,7 @@
 import base64
 import json
 import logging
-from dateime import datetime, timezone
+from datetime import datetime, timezone
 import functions_framework
 from google.cloud import firestore
 
