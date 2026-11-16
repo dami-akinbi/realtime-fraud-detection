@@ -128,7 +128,7 @@ resource "google_monitoring_alert_policy" "high_fraud_velocity" {
   conditions {
     display_name = "More than 3 fraudulent transactions in 5 minutes"
     condition_threshold {
-      filter          = "metric.type = \"cloud_run_revision\" AND metric.type = \"logging.googleapis.com/user/${google_logging_metric.fraud_flagged_metric.name}\""
+      filter          = "resource.type = \"cloud_run_revision\" AND metric.type = \"logging.googleapis.com/user/${google_logging_metric.fraud_flagged_metric.name}\""
       duration        = "0s"
       comparison      = "COMPARISON_GT"
       threshold_value = 3
