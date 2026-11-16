@@ -10,6 +10,7 @@ db = firestore.Client()
 
 HIGH_RISK_CATEGORIES = {"crypto_exchange", "wire_transfer", "gambling"}
 
+
 def evaluate_transaction(tx: dict) -> tuple[bool, list[str]]:
     reasons = []
     amount = float(tx.get("amount", 0))
@@ -22,8 +23,9 @@ def evaluate_transaction(tx: dict) -> tuple[bool, list[str]]:
         reasons.append("INTERNATIONAL_VELOCITY_THRESHOLD")
     if category in HIGH_RISK_CATEGORIES:
         reasons.append(f"HIGH_RISK_CATEGORY:{category}")
-    
+
     return (len(reasons) > 0), reasons
+
 
 @functions_framework.cloud_event
 def score_transaction(cloud_event):
@@ -36,7 +38,7 @@ def score_transaction(cloud_event):
     record = {
         "transaction_id": tx_id,
         "account_id": payload.get("account_id", "unknown"),
-        "amount": float(payload.get("amount"), 0),
+        "amount": float(payload.get("amount", 0)),
         "currency": payload.get("currency", "USD"),
         "merchant_category": payload.get("merchant_category", "general"),
         "is_international": bool(payload.get("is_international", False)),
@@ -46,7 +48,7 @@ def score_transaction(cloud_event):
     }
 
     if is_fraud:
-        db.collection("fraud_alerts").documents(tx_id).set(record)
+        db.collection("fraud_alerts").document(tx_id).set(record)
         logging.warning(json.dumps({"event": "FRAUD_FLAGGED", **record}))
     else:
         logging.info(json.dumps({"event": "TRANSACTION_CLEARED", "transaction_id": tx_id}))
