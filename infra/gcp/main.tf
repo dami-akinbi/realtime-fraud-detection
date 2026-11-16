@@ -6,7 +6,9 @@ resource "google_project_service" "fraud_apis" {
     "firestore.googleapis.com",
     "cloudfunctions.googleapis.com",
     "run.googleapis.com",
-    "cloudbuild.googleapis.com"
+    "cloudbuild.googleapis.com",
+    "eventarc.googleapis.com",
+    "artifactregistry.googleapis.com"
   ])
 
   project            = var.project_id
