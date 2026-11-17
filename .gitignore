@@ -17,3 +17,5 @@ __pycache__/
 .DS_Store
 Thumbs.db
 infra/gcp/scorer.zip
+
+infra/azure/azure_scorer.zip
