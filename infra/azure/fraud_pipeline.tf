@@ -84,7 +84,7 @@ resource "azurerm_storage_account" "fn_storage" {
 resource "azurerm_service_plan" "fn_plan" {
   name                = "asp-fraud-${var.environment}"
   resource_group_name = azurerm_resource_group.fraud_rg.name
-  location            = azurerm_resource_group.fraud_rg.location
+  location            = "eastus"
   os_type             = "Linux"
   sku_name            = "Y1"
 }
@@ -99,7 +99,7 @@ resource "azurerm_application_insights" "fn_insights" {
 resource "azurerm_linux_function_app" "anomaly_scorer" {
   name                       = "func-fraud-scorer-${var.environment}-${random_string.suffix.result}"
   resource_group_name        = azurerm_resource_group.fraud_rg.name
-  location                   = azurerm_resource_group.fraud_rg.location
+  location                   = "eastus"
   storage_account_name       = azurerm_storage_account.fn_storage.name
   storage_account_access_key = azurerm_storage_account.fn_storage.primary_access_key
   service_plan_id            = azurerm_service_plan.fn_plan.id
