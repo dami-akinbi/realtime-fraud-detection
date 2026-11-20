@@ -14,11 +14,10 @@ resource "azurerm_eventhub_namespace" "fraud_ehns" {
 }
 
 resource "azurerm_eventhub" "transactions_stream" {
-  name                = "evh-transactions-${var.environment}"
-  namespace_name      = azurerm_eventhub_namespace.fraud_ehns.name
-  resource_group_name = azurerm_resource_group.fraud_rg.name
-  partition_count     = 2
-  message_retention   = 1
+  name              = "evh-transactions-${var.environment}"
+  namespace_id      = azurerm_eventhub_namespace.fraud_ehns.id
+  partition_count   = 2
+  message_retention = 1
 }
 
 resource "azurerm_eventhub_namespace_authorization_rule" "fn_listen" {
@@ -66,7 +65,7 @@ resource "azurerm_cosmosdb_sql_container" "fraud_alerts" {
   partition_key_paths = ["/account_id"]
 }
 
-# 3. Package Python Function Code & Provision Consumption Plan (Y1) Function App
+# 3. Package Python Function Code & Provision Flex Consumption (FC1) Function App
 data "archive_file" "azure_scorer_zip" {
   type        = "zip"
   source_dir  = "${path.module}/../../src/azure_scorer"
@@ -79,6 +78,12 @@ resource "azurerm_storage_account" "fn_storage" {
   location                 = azurerm_resource_group.fraud_rg.location
   account_tier             = "Standard"
   account_replication_type = "LRS"
+}
+
+resource "azurerm_storage_container" "fn_deployments" {
+  name                  = "deployments"
+  storage_account_id    = azurerm_storage_account.fn_storage.id
+  container_access_type = "private"
 }
 
 resource "azurerm_service_plan" "fn_plan" {
@@ -100,30 +105,41 @@ resource "azurerm_application_insights" "fn_insights" {
   }
 }
 
-resource "azurerm_linux_function_app" "anomaly_scorer" {
-  name                       = "func-fraud-scorer-${var.environment}-${random_string.suffix.result}"
-  resource_group_name        = azurerm_resource_group.fraud_rg.name
-  location                   = "eastus"
-  storage_account_name       = azurerm_storage_account.fn_storage.name
-  storage_account_access_key = azurerm_storage_account.fn_storage.primary_access_key
-  service_plan_id            = azurerm_service_plan.fn_plan.id
-  zip_deploy_file            = data.archive_file.azure_scorer_zip.output_path
+resource "azurerm_function_app_flex_consumption" "anomaly_scorer" {
+  name                = "func-fraud-scorer-${var.environment}-${random_string.suffix.result}"
+  resource_group_name = azurerm_resource_group.fraud_rg.name
+  location            = "eastus"
+  service_plan_id     = azurerm_service_plan.fn_plan.id
+
+  storage_container_type      = "blobContainer"
+  storage_container_endpoint  = "${azurerm_storage_account.fn_storage.primary_blob_endpoint}${azurerm_storage_container.fn_deployments.name}"
+  storage_authentication_type = "StorageAccountConnectionString"
+  storage_access_key          = azurerm_storage_account.fn_storage.primary_access_key
+
+  runtime_name           = "python"
+  runtime_version        = "3.11"
+  maximum_instance_count = 50
+  instance_memory_in_mb  = 2048
 
   site_config {
-    always_on                              = true
     application_insights_connection_string = azurerm_application_insights.fn_insights.connection_string
-    application_stack {
-      python_version = "3.11"
-    }
   }
 
   app_settings = {
-    "FUNCTIONS_WORKER_RUNTIME"       = "python"
-    "AzureWebJobsFeatureFlags"       = "EnableWorkerIndexing"
-    "SCM_DO_BUILD_DURING_DEPLOYMENT" = "true"
-    "ENABLE_ORYX_BUILD"              = "true"
-    "EventHubConnectionString"       = azurerm_eventhub_namespace_authorization_rule.fn_listen.primary_connection_string
-    "CosmosDbConnectionString"       = azurerm_cosmosdb_account.fraud_cosmos.primary_sql_connection_string
+    "AzureWebJobsFeatureFlags" = "EnableWorkerIndexing"
+    "EventHubConnectionString" = azurerm_eventhub_namespace_authorization_rule.fn_listen.primary_connection_string
+    "CosmosDbConnectionString" = azurerm_cosmosdb_account.fraud_cosmos.primary_sql_connection_string
+  }
+}
+
+resource "terraform_data" "deploy_azure_scorer" {
+  triggers_replace = [
+    data.archive_file.azure_scorer_zip.output_sha256,
+    azurerm_function_app_flex_consumption.anomaly_scorer.id,
+  ]
+
+  provisioner "local-exec" {
+    command = "az functionapp deployment source config-zip --resource-group ${azurerm_resource_group.fraud_rg.name} --name ${azurerm_function_app_flex_consumption.anomaly_scorer.name} --src ${data.archive_file.azure_scorer_zip.output_path} --build-remote true"
   }
 }
 
@@ -131,7 +147,7 @@ resource "azurerm_linux_function_app" "anomaly_scorer" {
 resource "azurerm_monitor_metric_alert" "fn_errors" {
   name                = "alert-fraud-scorer-errors-${var.environment}"
   resource_group_name = azurerm_resource_group.fraud_rg.name
-  scopes              = [azurerm_linux_function_app.anomaly_scorer.id]
+  scopes              = [azurerm_function_app_flex_consumption.anomaly_scorer.id]
   description         = "Alert when Azure Function invocation failures exceed 0"
   severity            = 2
   frequency           = "PT5M"
@@ -147,7 +163,7 @@ resource "azurerm_monitor_metric_alert" "fn_errors" {
 }
 
 output "azure_function_app_name" {
-  value = azurerm_linux_function_app.anomaly_scorer.name
+  value = azurerm_function_app_flex_consumption.anomaly_scorer.name
 }
 
 output "azure_eventhub_namespace" {
