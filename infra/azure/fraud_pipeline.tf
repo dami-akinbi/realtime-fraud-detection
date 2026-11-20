@@ -143,20 +143,20 @@ resource "terraform_data" "deploy_azure_scorer" {
   }
 }
 
-# 4. Azure Monitor Metric Alert on Function Execution Failures
+# 4. Azure Monitor Metric Alert on Function Execution Exceptions
 resource "azurerm_monitor_metric_alert" "fn_errors" {
   name                = "alert-fraud-scorer-errors-${var.environment}"
   resource_group_name = azurerm_resource_group.fraud_rg.name
-  scopes              = [azurerm_function_app_flex_consumption.anomaly_scorer.id]
-  description         = "Alert when Azure Function invocation failures exceed 0"
+  scopes              = [azurerm_application_insights.fn_insights.id]
+  description         = "Alert when Azure Function unhandled exceptions exceed 0"
   severity            = 2
   frequency           = "PT5M"
   window_size         = "PT5M"
 
   criteria {
-    metric_namespace = "Microsoft.Web/sites"
-    metric_name      = "Http5xx"
-    aggregation      = "Total"
+    metric_namespace = "microsoft.insights/components"
+    metric_name      = "exceptions/count"
+    aggregation      = "Count"
     operator         = "GreaterThan"
     threshold        = 0
   }
