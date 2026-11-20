@@ -86,7 +86,7 @@ resource "azurerm_service_plan" "fn_plan" {
   resource_group_name = azurerm_resource_group.fraud_rg.name
   location            = "eastus"
   os_type             = "Linux"
-  sku_name            = "Y1"
+  sku_name            = "B1"
 }
 
 resource "azurerm_application_insights" "fn_insights" {
@@ -94,6 +94,10 @@ resource "azurerm_application_insights" "fn_insights" {
   location            = azurerm_resource_group.fraud_rg.location
   resource_group_name = azurerm_resource_group.fraud_rg.name
   application_type    = "other"
+
+  lifecycle {
+    ignore_changes = [workspace_id]
+  }
 }
 
 resource "azurerm_linux_function_app" "anomaly_scorer" {
@@ -106,6 +110,7 @@ resource "azurerm_linux_function_app" "anomaly_scorer" {
   zip_deploy_file            = data.archive_file.azure_scorer_zip.output_path
 
   site_config {
+    always_on                              = true
     application_insights_connection_string = azurerm_application_insights.fn_insights.connection_string
     application_stack {
       python_version = "3.11"
