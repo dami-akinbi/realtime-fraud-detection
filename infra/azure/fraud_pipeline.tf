@@ -86,7 +86,7 @@ resource "azurerm_service_plan" "fn_plan" {
   resource_group_name = azurerm_resource_group.fraud_rg.name
   location            = "eastus"
   os_type             = "Linux"
-  sku_name            = "B1"
+  sku_name            = "FC1"
 }
 
 resource "azurerm_application_insights" "fn_insights" {
