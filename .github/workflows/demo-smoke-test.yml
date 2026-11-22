@@ -1,0 +1,111 @@
+name: One-Click Employer Demo & Traffic Generator
+
+on:
+  workflow_dispatch:
+    inputs:
+      target_cloud:
+        description: "Target cloud pipeline(s) to stream synthetic transactions"
+        required: true
+        default: "both"
+        type: choice
+        options:
+          - both
+          - gcp
+          - azure
+      transaction_count:
+        description: "Number of synthetic transactions to generate"
+        required: true
+        default: "10"
+        type: string
+      teardown_after_demo:
+        description: "Destroy GCP and Azure infrastructure after traffic generation?"
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  stream-synthetic-traffic:
+    runs-on: ubuntu-latest
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: hashicorp/setup-terraform@v4
+
+      - name: Discover Live Azure Event Hubs Namespace
+        id: azure_outputs
+        if: inputs.target_cloud == 'both' || inputs.target_cloud == 'azure'
+        working-directory: ./infra/azure
+        run: |
+          terraform init -input=false
+          EHNS=$(terraform output -raw azure_eventhub_namespace)
+          echo "fqdn=${EHNS}.servicebus.windows.net" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Generator Dependencies & Stream Transactions
+        run: |
+          pip install -r src/generator/requirements.txt
+          python src/generator/generate_traffic.py \
+            --target "${{ inputs.target_cloud }}" \
+            --count "${{ inputs.transaction_count }}" \
+            --azure-namespace "${{ steps.azure_outputs.outputs.fqdn }}"
+
+  optional-teardown:
+    needs: stream-synthetic-traffic
+    if: ${{ inputs.teardown_after_demo }}
+    runs-on: ubuntu-latest
+    env:
+      ARM_USE_OIDC: "true"
+      ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+      ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+      ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SERVICE_ACCOUNT }}
+
+      - uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - uses: hashicorp/setup-terraform@v4
+
+      - name: Teardown GCP Pipeline
+        working-directory: ./infra/gcp
+        run: |
+          terraform init -input=false
+          terraform destroy -auto-approve
+
+      - name: Teardown Azure Pipeline & Resource Group
+        working-directory: ./infra/azure
+        run: |
+          az group delete --name rg-fraud-dev --yes || true
+          terraform init -input=false
+          terraform destroy -auto-approve
